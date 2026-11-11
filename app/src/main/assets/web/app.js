@@ -16,7 +16,10 @@
     pendingBatch: null,
     timer: null,
     startedAt: 0,
-    processedCalls: new Set()
+    processedCalls: new Set(),
+    history: [],
+    renewalTimer: null,
+    reconnecting: false
   };
 
   function nativeGet(method, fallback = "") {
@@ -62,6 +65,10 @@
   }
 
   function appendMessage(role, text) {
+    if ((role === "user" || role === "assistant") && text) {
+      state.history.push({ role, text: String(text) });
+      if (state.history.length > 40) state.history = state.history.slice(-40);
+    }
     const box = $("conversation");
     const empty = box.querySelector(".empty-conversation");
     if (empty) empty.remove();
@@ -223,12 +230,40 @@
         setConnection("JONLI", "live");
         setVoiceState("Sizni tinglayapman", "Gapirishingiz mumkin. Javobni istalgan payt bo'lishingiz mumkin.", "active");
         state.timer = window.setInterval(updateTimer, 1000);
-        sendEvent({
-          type: "conversation.item.create",
-          item: { type: "message", role: "user", content: [{ type: "input_text", text:
-            "Jonli sessiya boshlandi. Dispetcherga tabiiy o'zbek tilida qisqa salom bering va qaysi soatlik kuzatuvni yuritishni boshlashini so'rang." }] }
-        });
-        sendEvent({ type: "response.create" });
+        if (state.history.length) {
+          const recent = state.history.slice(-16);
+          sendEvent({
+            type: "conversation.item.create",
+            item: { type: "message", role: "user", content: [{ type: "input_text", text:
+              "Oldingi jonli sessiya davom ettirilmoqda. Quyidagi so'nggi muloqotlarni kontekst sifatida qabul qiling; avvalgi suhbatni takrorlamang, yangi gapni kuting." }] }
+          });
+          recent.forEach(turn => sendEvent({
+            type: "conversation.item.create",
+            item: { type: "message", role: turn.role, content: [{ type: "input_text", text: turn.text }] }
+          }));
+          if (state.pendingBatch) {
+            const pending = state.pendingBatch;
+            const readings = (pending.readings || []).map(item =>
+              item.point_title + ": H " + item.h_value +
+              (item.q_value === null ? "" : ", Q " + item.q_value)).join("; ");
+            sendEvent({
+              type: "conversation.item.create",
+              item: { type: "message", role: "user", content: [{ type: "input_text", text:
+                "Tizim eslatmasi: hali tasdiqlanmagan batch mavjud. ID " + pending.batch_id +
+                ", sana " + pending.observation_date + ", soat " + pending.hour + ":00. " +
+                readings + ". Uni faqat dispetcher aniq og'zaki tasdiqlasa saqlang." }] }
+            });
+          }
+        } else {
+          sendEvent({
+            type: "conversation.item.create",
+            item: { type: "message", role: "user", content: [{ type: "input_text", text:
+              "Jonli sessiya boshlandi. Dispetcherga tabiiy o'zbek tilida qisqa salom bering va qaysi soatlik kuzatuvni yuritishni boshlashini so'rang." }] }
+          });
+          sendEvent({ type: "response.create" });
+        }
+        state.reconnecting = false;
+        scheduleSessionRenewal();
       };
       channel.onmessage = event => handleRealtimeEvent(event.data);
       channel.onclose = () => {
@@ -263,6 +298,20 @@
 
   function sendEvent(event) {
     if (state.channel?.readyState === "open") state.channel.send(JSON.stringify(event));
+  }
+
+  function scheduleSessionRenewal() {
+    if (state.renewalTimer) window.clearTimeout(state.renewalTimer);
+    // Realtime sessions are limited to 60 minutes; renew early to avoid an abrupt disconnect.
+    state.renewalTimer = window.setTimeout(() => renewLiveSession(), 52 * 60 * 1000);
+  }
+
+  async function renewLiveSession() {
+    if (!state.active || state.starting) return;
+    state.reconnecting = true;
+    appendMessage("assistant", "Jonli aloqa uzilmasligi uchun AI sessiyasini xavfsiz yangilayapman. Suhbat kontekstini saqlayman.");
+    stopLiveSession(false);
+    await startLiveSession();
   }
 
   async function handleRealtimeEvent(raw) {
@@ -340,7 +389,9 @@
     state.active = false;
     state.starting = false;
     if (state.timer) window.clearInterval(state.timer);
+    if (state.renewalTimer) window.clearTimeout(state.renewalTimer);
     state.timer = null;
+    state.renewalTimer = null;
     if (state.channel) {
       try { state.channel.close(); } catch (_) {}
     }
@@ -426,6 +477,8 @@
     stopLiveSession(false);
     state.token = "";
     state.user = null;
+    state.history = [];
+    state.reconnecting = false;
     nativeSet("clearAccessToken");
     $("conversation").innerHTML = '<div class="empty-conversation"><div class="empty-icon">◌</div><strong>Suhbat hali boshlanmadi</strong><span>Jonli sessiyani oching. AI Sizni tinglaydi va ovoz bilan javob beradi.</span></div>';
     hidePending();
@@ -440,6 +493,7 @@
   $("backFromSettings").addEventListener("click", () => showScreen(state.token ? "agentScreen" : "loginScreen"));
   $("logoutButton").addEventListener("click", logout);
   $("clearChatButton").addEventListener("click", () => {
+    state.history = [];
     $("conversation").innerHTML = '<div class="empty-conversation"><div class="empty-icon">◌</div><strong>Suhbat tarixi tozalandi</strong><span>Jonli sessiya davom etmoqda.</span></div>';
   });
 
