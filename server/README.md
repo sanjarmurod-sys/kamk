@@ -52,3 +52,17 @@ The initial Realtime milestone implements real duplex voice, dispatcher sign-in,
 - Rotate seeded admin credentials after first deployment.
 - Restrict database access to the backend service.
 - Back up PostgreSQL and test restore procedures.
+
+
+## Upload the official Excel workbook
+
+Sign in using an administrator account and use the app's Settings screen to upload the original `.xlsx` workbook. The API validates its first header and date-tab format, stores it at `WORKBOOK_TEMPLATE_PATH`, and imports existing readings into PostgreSQL without overwriting existing database records. Mount a persistent volume at `/data` so the template and generated reports survive container restarts.
+
+The export engine looks for the requested date tab in `dd,MM,yy` or `dd,MM,yyyy` format. It preserves the original workbook structure and writes values only into the expected H/Q cells. If the date tab is absent, or an existing workbook cell conflicts with the database value, export stops rather than silently changing the workbook.
+
+## Telegram delivery
+
+Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in backend secrets. Add the bot to the target Telegram group and grant it permission to send documents.
+
+- Voice-initiated send: the agent prepares the report, reads out its date and record count, waits for the dispatcher to explicitly agree, then sends it.
+- Scheduled send: set `REPORT_SCHEDULE_ENABLED=true`. The backend sends at minute 00 of every two-hour slot in the `Asia/Tashkent` timezone. A database idempotency key prevents duplicate sends for the same slot when more than one app instance is running.
