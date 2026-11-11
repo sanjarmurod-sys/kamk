@@ -105,3 +105,24 @@ h2 { margin: 5px 0 0; font: 700 18px Manrope; letter-spacing: -.03em; }
 .app-footer { display: flex; justify-content: space-between; padding-top: 19px; margin-top: 18px; border-top: 1px solid var(--line); font-size: 7px; color: #647787; }
 #remoteAudio { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 @media (min-width: 560px) { .app-shell { padding-left: 28px; padding-right: 28px; } .voice-card { min-height: 390px; } }
+
+.native-select {
+  width: 100%;
+  height: 46px;
+  border: 1px solid rgba(184,203,221,.16);
+  border-radius: 10px;
+  background: rgba(3,10,17,.44);
+  color: var(--text);
+  padding: 0 12px;
+  outline: none;
+  font-size: 13px;
+}
+.native-select:focus { border-color: rgba(215,181,109,.7); }
+.account-list { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.account-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(2,9,15,.28); }
+.account-item div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.account-item strong { color: var(--text); font-size: 11px; }
+.account-item span { color: var(--muted); font-size: 9px; }
+.account-item i { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.account-active { background: var(--green); box-shadow: 0 0 7px rgba(112,196,157,.55); }
+.account-inactive { background: var(--red); }
