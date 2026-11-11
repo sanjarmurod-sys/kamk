@@ -112,10 +112,9 @@ public final class ExcelExporter {
             appendObservation(out, values.get(hour + ":pk583"), "J" + row, "K" + row);
             out.append("</row>");
         }
-        out.append("</sheetData><mergeCells count=\"7\">");
+        out.append("</sheetData><mergeCells count=\"5\">");
         out.append("<mergeCell ref=\"A1:A2\"/><mergeCell ref=\"B1:B2\"/>");
-        out.append("<mergeCell ref=\"C1:D1\"/><mergeCell ref=\"E1:F1\"/>");
-        out.append("<mergeCell ref=\"G1:G2\"/><mergeCell ref=\"H1:H2\"/><mergeCell ref=\"I1:I2\"/>");
+        out.append("<mergeCell ref=\"C1:D1\"/><mergeCell ref=\"E1:F1\"/><mergeCell ref=\"J1:K1\"/>");
         out.append("</mergeCells><pageMargins left=\"0.25\" right=\"0.25\" top=\"0.5\" bottom=\"0.5\" header=\"0.2\" footer=\"0.2\"/>");
         out.append("</worksheet>");
         return out.toString();
