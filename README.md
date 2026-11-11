@@ -1,33 +1,32 @@
 # KAMK AI Dispetcher
 
-KAMK is being rebuilt as a professional Android voice-first dispatcher agent for hourly water-observation workflows.
+KAMK is a voice-first Android dispatcher agent for hourly water-observation workflows.
 
-## Current milestone: realtime voice and dispatcher backend
+## Implemented development milestone
 
-The current branch contains:
-- Android WebView-hosted WebRTC voice screen with foreground-only microphone session, barge-in capable Realtime audio, voice connection state and conversation transcript.
-- OpenAI Realtime client-secret endpoint on the backend. Permanent OpenAI API key remains server-side.
-- Individual dispatcher sign-in, role-based supervisor/admin access and PostgreSQL storage.
-- Realtime function tools to prepare observation batches, read the exact values back, wait for explicit spoken confirmation, and commit confirmed readings.
-- Server-side validation for seven points, H-only and H+Q fields, hour/date, duplicate protection and audit events.
-- Native Android microphone permission bridge and local secure-origin assets.
+- Android mobile interface for dispatcher sign-in, live-session controls, conversation transcript and admin settings.
+- WebRTC full-duplex audio connection to OpenAI Realtime, with foreground microphone permission and assistant barge-in support.
+- Short-lived Realtime client-secret creation on a trusted backend; the permanent OpenAI API key never enters the APK.
+- Individual dispatcher accounts, dispatcher/supervisor/admin roles, PostgreSQL storage and audit events.
+- Uzbek agent instructions and server-side H/Q validation for seven observation points.
+- Prepare → read-back → explicit spoken confirmation → commit workflow for observation batches.
+- Duplicate date/hour/point protection; no silent overwrites.
+- Admin upload of the original Excel workbook from the Android settings screen, historical data import, date-sheet lookup and template-preserving report export.
+- Telegram report preparation and confirmation; optional server schedule at minute 00 every two hours in Asia/Tashkent.
+- CI for Android unit tests/build plus Node backend and WebRTC client syntax checks.
 
-## Realtime architecture references
-- [Realtime speech-to-speech conversations](https://developers.openai.com/api/docs/guides/realtime-conversations)
-- [WebRTC connection and ephemeral client secrets](https://developers.openai.com/api/docs/guides/voice-webrtc)
-- [GPT-Realtime-2.1 model](https://developers.openai.com/api/docs/models/gpt-realtime-2.1)
+## Current source of truth
+- `app/` — Android client, WebView-hosted Realtime WebRTC UI and native permission/file-picker bridge.
+- `server/` — secure Node.js API, PostgreSQL schema, Realtime token minting, agent functions, Excel template import/export and Telegram delivery.
+- `docs/REALTIME_DISPATCHER_AGENT.md` — architecture and safety requirements.
+- `docs/VOICE_AGENT_CONVERSATION_EXAMPLES.md` — Uzbek conversation behavior.
 
-## Repository map
-- `app/` — Android client and local realtime voice UI.
-- `server/` — secure Node.js API, Realtime token minting, PostgreSQL schema and agent function execution.
-- `docs/REALTIME_DISPATCHER_AGENT.md` — target architecture and safety requirements.
-- `docs/VOICE_AGENT_CONVERSATION_EXAMPLES.md` — Uzbek speech-agent behavior examples.
+## Required deployment before live use
 
-## Backend deployment required
+The Android app needs an HTTPS backend URL. The backend needs PostgreSQL, a server-side OpenAI API key with Realtime access and billing enabled, a JWT secret, initial admin credentials and persistent storage for the official workbook and report files. Telegram delivery additionally needs a bot token and target group chat ID. Configure these as backend secrets; never paste them into source code or place them in the APK.
 
-The APK cannot create a live AI session until the backend is deployed and configured. Follow [server/README.md](server/README.md). Required server-side configuration includes PostgreSQL, a long random JWT secret, and an OpenAI API key with Realtime access and billing enabled. Configure the backend HTTPS URL in the app login screen.
+See [server/README.md](server/README.md) and [server/.env.example](server/.env.example).
 
-**Never place the permanent OpenAI API key or Telegram bot token in the APK or source repository.**
+## Not yet production-complete
 
-## Not complete yet
-This milestone is not the finished water-dispatch production system. The official uploaded Excel workbook template and its exact formatting/formulas, Excel export, Telegram scheduled reports, correction workflow, offline synchronization, supervisor dashboard and full on-device acceptance tests remain to be implemented. Do not replace the official operational spreadsheet with this milestone yet.
+The repository contains the first integrated realtime/backend implementation, but it has not yet been connected to a deployed server or exercised with a real OpenAI account, live Telegram group and physical Android phone. The correction/overwrite workflow, reliable offline queue and sync conflict handling, full supervisor dashboard, operational monitoring/backups and end-to-end acceptance tests remain. Treat current APKs as development builds, not as the official operational system.
