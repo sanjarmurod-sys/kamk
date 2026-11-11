@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#0a111a">
+  <title>KAMK AI Dispetcher</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-mark"><span class="brand-wave">≈</span></div>
+      <div class="brand-text">
+        <div class="brand-name">KAMK <span>AI</span></div>
+        <div class="brand-subtitle">DISPETCHERLIK TIZIMI</div>
+      </div>
+      <button id="settingsButton" class="icon-button" aria-label="Sozlamalar">⚙</button>
+    </header>
+
+    <main>
+      <section id="loginScreen" class="screen">
+        <div class="eyebrow">XAVFSIZ DISPETCHER KABINETI</div>
+        <h1>Tizimga<br><em>kirish</em></h1>
+        <p class="intro">Shaxsiy akkauntingiz orqali KAMK AI dispetcher agentiga ulaning.</p>
+        <form id="loginForm" class="panel form-panel">
+          <label for="backendUrl">Server manzili</label>
+          <input id="backendUrl" type="url" inputmode="url" placeholder="https://api.sizning-serveringiz.uz" autocomplete="url" required>
+          <label for="username">Login</label>
+          <input id="username" type="text" autocomplete="username" placeholder="Dispetcher logini" required>
+          <label for="password">Parol</label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="Parolingiz" required>
+          <button class="primary-button full-width" type="submit">KABINETGA KIRISH <span>↗</span></button>
+          <div id="loginMessage" class="form-message" role="status"></div>
+        </form>
+        <div class="security-note"><span class="secure-dot"></span> OpenAI API kaliti telefonda saqlanmaydi</div>
+      </section>
+
+      <section id="agentScreen" class="screen hidden">
+        <div class="welcome-line">
+          <div>
+            <div class="eyebrow">SHAXSIY KABINET</div>
+            <div id="dispatcherName" class="dispatcher-name">Dispetcher</div>
+          </div>
+          <div id="rolePill" class="role-pill">DISPETCHER</div>
+        </div>
+
+        <div class="voice-card">
+          <div class="voice-topline">
+            <span class="eyebrow">REALTIME VOICE AGENT</span>
+            <span id="connectionPill" class="connection-pill"><i></i> TAYYOR</span>
+          </div>
+          <div id="voiceOrb" class="voice-orb">
+            <div class="orb-ring ring-one"></div>
+            <div class="orb-ring ring-two"></div>
+            <div class="orb-core"><span> K </span></div>
+          </div>
+          <div id="voiceStatus" class="voice-status">Siz bilan suhbatga tayyor</div>
+          <div id="voiceHint" class="voice-hint">Jonli suhbatni boshlash uchun tugmani bosing</div>
+          <button id="liveButton" class="live-button"><span class="live-button-icon">●</span><span id="liveButtonText">JONLI SUHBATNI BOSHLASH</span></button>
+          <div class="session-footer"><span class="session-indicator"></span><span id="sessionTimer">SESSiya FAOL EMAS</span></div>
+        </div>
+
+        <div class="section-heading">
+          <div><div class="eyebrow">SUHBAT TARIXI</div><h2>AI bilan muloqot</h2></div>
+          <button id="clearChatButton" class="text-button">Tozalash</button>
+        </div>
+        <div id="conversation" class="conversation panel">
+          <div class="empty-conversation">
+            <div class="empty-icon">◌</div>
+            <strong>Suhbat hali boshlanmadi</strong>
+            <span>Jonli sessiyani oching. AI Sizni tinglaydi va ovoz bilan javob beradi.</span>
+          </div>
+        </div>
+
+        <div id="pendingCard" class="pending-card hidden">
+          <div class="pending-header"><span class="pending-indicator"></span><strong>TASDIQLASH KUTILMOQDA</strong></div>
+          <div id="pendingDetails" class="pending-details"></div>
+          <p>AI qiymatlarni qaytarib o‘qiydi. Faqat aniq og‘zaki roziligingizdan keyin yozuv saqlanadi.</p>
+        </div>
+
+        <div class="quick-hint"><span>AI</span><div>Masalan: “Soat 9 dagi kuzatuvni boshlaymiz. KAMK boshidan H 194, Q 40.”</div></div>
+        <button id="logoutButton" class="logout-button">Akkauntdan chiqish</button>
+      </section>
+
+      <section id="settingsScreen" class="screen hidden">
+        <div class="eyebrow">TIZIM KONFIGURATSIYASI</div>
+        <h1>Ilova<br><em>sozlamalari</em></h1>
+        <div class="panel form-panel">
+          <label for="settingsBackendUrl">Backend API URL</label>
+          <input id="settingsBackendUrl" type="url" placeholder="https://api.sizning-serveringiz.uz">
+          <button id="saveBackendButton" class="primary-button full-width">SERVER MANZILINI SAQLASH</button>
+          <div id="settingsMessage" class="form-message"></div>
+          <div class="settings-divider"></div>
+          <div class="setting-row"><span>Realtime ovoz modeli</span><strong>GPT-REALTIME-2.1</strong></div>
+          <div class="setting-row"><span>Ovoz</span><strong>MARIN</strong></div>
+          <div class="setting-row"><span>Ulanish</span><strong>WEBRTC</strong></div>
+          <p class="small-note">API kaliti faqat serverda saqlanadi. Server manzili HTTPS bo‘lishi kerak.</p>
+        </div>
+        <button id="backFromSettings" class="secondary-button full-width">ORTGA QAYTISH</button>
+      </section>
+    </main>
+
+    <footer class="app-footer"><span>KAMK OPERATIONS</span><span>SECURE REALTIME · v0.2</span></footer>
+  </div>
+  <audio id="remoteAudio" autoplay playsinline></audio>
+  <script src="./app.js"></script>
+</body>
+</html>
