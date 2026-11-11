@@ -91,6 +91,15 @@
           <input id="settingsBackendUrl" type="url" placeholder="https://api.sizning-serveringiz.uz">
           <button id="saveBackendButton" class="primary-button full-width">SERVER MANZILINI SAQLASH</button>
           <div id="settingsMessage" class="form-message"></div>
+          <div id="templateSettings" class="hidden">
+            <div class="settings-divider"></div>
+            <div class="eyebrow">RASMIY EXCEL SHABLONI</div>
+            <p class="small-note">Siz yuborgan asl soatli kuzatuv .xlsx faylini bir marta tanlang. Varaqlar, jadvallar va formatlar serverda saqlanadi.</p>
+            <label for="templateFile">Excel shablon (.xlsx)</label>
+            <input id="templateFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+            <button id="uploadTemplateButton" class="primary-button full-width" type="button">RASMIY SHABLONNI YUKLASH</button>
+            <div id="templateMessage" class="form-message"></div>
+          </div>
           <div class="settings-divider"></div>
           <div class="setting-row"><span>Realtime ovoz modeli</span><strong>GPT-REALTIME-2.1</strong></div>
           <div class="setting-row"><span>Ovoz</span><strong>MARIN</strong></div>
