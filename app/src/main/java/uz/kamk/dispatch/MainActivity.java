@@ -2,12 +2,14 @@ package uz.kamk.dispatch;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.ValueCallback;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -21,11 +23,13 @@ import androidx.webkit.WebViewAssetLoader;
 
 public final class MainActivity extends Activity {
     private static final int REQUEST_MICROPHONE = 803;
+    private static final int REQUEST_EXCEL_FILE = 804;
     private static final String APP_ORIGIN = "https://appassets.androidplatform.net";
     private static final String START_PAGE = APP_ORIGIN + "/assets/web/index.html";
 
     private WebView webView;
     private PermissionRequest pendingWebPermission;
+    private ValueCallback<Uri[]> pendingFileChooser;
     private WebViewAssetLoader assetLoader;
     private android.content.SharedPreferences preferences;
 
@@ -60,6 +64,25 @@ public final class MainActivity extends Activity {
             @Override
             public void onPermissionRequestCanceled(PermissionRequest request) {
                 if (pendingWebPermission == request) pendingWebPermission = null;
+            }
+
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                              FileChooserParams params) {
+                if (pendingFileChooser != null) pendingFileChooser.onReceiveValue(null);
+                pendingFileChooser = callback;
+                try {
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                    startActivityForResult(intent, REQUEST_EXCEL_FILE);
+                    return true;
+                } catch (Exception error) {
+                    pendingFileChooser = null;
+                    callback.onReceiveValue(null);
+                    Toast.makeText(MainActivity.this, "Excel fayl tanlagichni ochib bo'lmadi.", Toast.LENGTH_LONG).show();
+                    return false;
+                }
             }
         });
         webView.setWebViewClient(new WebViewClient() {
@@ -117,6 +140,19 @@ public final class MainActivity extends Activity {
             pendingWebPermission = request;
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_MICROPHONE);
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_EXCEL_FILE && pendingFileChooser != null) {
+            Uri[] results = null;
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+                results = new Uri[]{data.getData()};
+            }
+            pendingFileChooser.onReceiveValue(results);
+            pendingFileChooser = null;
         }
     }
 
@@ -187,6 +223,10 @@ public final class MainActivity extends Activity {
         if (pendingWebPermission != null) {
             pendingWebPermission.deny();
             pendingWebPermission = null;
+        }
+        if (pendingFileChooser != null) {
+            pendingFileChooser.onReceiveValue(null);
+            pendingFileChooser = null;
         }
         if (webView != null) {
             webView.loadUrl("about:blank");
