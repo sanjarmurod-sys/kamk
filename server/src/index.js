@@ -6,7 +6,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import ExcelJS from "exceljs";
+import multer from "multer";
+import cron from "node-cron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { rateLimit } from "express-rate-limit";
@@ -83,7 +86,13 @@ Yozuv jarayoni:
 
 Vositalarni faqat maqsadga muvofiq ishlating. get_observations — avval kiritilgan yozuvlarni tekshirish uchun. prepare_observation_batch — yangi yozuv tayyorlash uchun. confirm_observation_batch — foydalanuvchi og'zaki tasdiqlaganidan keyin saqlash uchun.
 
-Dispetcher: {{dispatcher_name}} ({{role}}). Sizning vazifangiz kuzatuvni to'g'ri tushunish, yozuvni nazorat bilan bajarish va hisobot ishini yengillashtirish. Siz Telegramga yoki Excel fayliga yuborilganini faqat tegishli xizmat haqiqatda bajarib bergandan keyin aytishingiz mumkin. Hozirgi bosqichda siz faqat tasdiqlangan kuzatuvlarni markaziy bazaga yozasiz; Excel va Telegram avtomatizatsiyasi keyingi modulda ulanadi.`;
+Dispetcher: {{dispatcher_name}} ({{role}}). Sizning vazifangiz kuzatuvni to'g'ri tushunish, yozuvni nazorat bilan bajarish va hisobot ishini yengillashtirish. Hisobot jarayoni:
+- Dispetcher "hisobotni yubor" desa, avval prepare_telegram_report ni chaqiring. Bu shablon asosida Excel faylini tayyorlaydi, hali Telegramga yubormaydi.
+- Fayl sanasi va yozuvlar sonini aytib, "Shu hisobotni Telegram guruhiga yuboraymi?" deb aniq rozilik so'rang.
+- Faqat aniq rozilikdan keyin confirm_telegram_report ni chaqiring. Telegram API muvaffaqiyatli javob bergandagina yuborilganini tasdiqlang.
+- Har 2 soatlik avtomatik yuborishni server o'zi bajarishi mumkin; uni dispetcherning og'zaki tasdig'i bilan aralashtirmang.
+
+Dispetcher: {{dispatcher_name}} ({{role}}). Sizning vazifangiz kuzatuvni to'g'ri tushunish, yozuvni nazorat bilan bajarish va hisobot ishini yengillashtirish. Siz Telegramga yoki Excel fayliga yuborilganini faqat tegishli xizmat haqiqatda bajarib bergandan keyin aytishingiz mumkin.`;
 
 const toolDefinitions = [
   {
@@ -143,6 +152,34 @@ const toolDefinitions = [
       additionalProperties: false
     },
     strict: true
+  },
+  {
+    type: "function",
+    name: "prepare_telegram_report",
+    description: "Prepare the official Excel report for a date and show its details. This does not send it to Telegram.",
+    parameters: {
+      type: "object",
+      properties: {
+        observation_date: { type: "string", description: "Date in YYYY-MM-DD format." }
+      },
+      required: ["observation_date"],
+      additionalProperties: false
+    },
+    strict: true
+  },
+  {
+    type: "function",
+    name: "confirm_telegram_report",
+    description: "Send a previously prepared report to the configured Telegram group only after the dispatcher explicitly confirms.",
+    parameters: {
+      type: "object",
+      properties: {
+        report_id: { type: "string", description: "Pending report UUID returned by prepare_telegram_report." }
+      },
+      required: ["report_id"],
+      additionalProperties: false
+    },
+    strict: true
   }
 ];
 
@@ -177,8 +214,9 @@ function requireRole(...roles) {
 }
 
 function validDate(value) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
-    && !Number.isNaN(Date.parse(value + "T00:00:00Z"));
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + "T00:00:00Z");
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 async function initializeDatabase() {
@@ -287,6 +325,294 @@ app.get("/api/admin/dispatchers", requireAuth, requireRole("admin", "supervisor"
     );
     res.json({ users: result.rows });
   } catch (error) {
+    next(error);
+  }
+});
+
+
+const templateUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter(_req, file, callback) {
+    const allowed = file.originalname.toLowerCase().endsWith(".xlsx");
+    callback(allowed ? null : new Error("Faqat .xlsx Excel shablonini yuklang."), allowed);
+  }
+});
+
+const TEMPLATE_PATH = process.env.WORKBOOK_TEMPLATE_PATH || "/data/kamk-hourly-observation-template.xlsx";
+const REPORT_DIR = process.env.REPORT_OUTPUT_DIR || "/data/reports";
+const POINT_COLUMNS = [
+  { key: "reyka02", h: 2, q: null },
+  { key: "pk66", h: 3, q: 4 },
+  { key: "pk287", h: 5, q: 6 },
+  { key: "pk390", h: 7, q: null },
+  { key: "pk446", h: 8, q: null },
+  { key: "pk559", h: 9, q: null },
+  { key: "pk583", h: 10, q: 11 }
+];
+
+function dateFromSheetName(name) {
+  const match = String(name).match(/^(\\d{1,2}),(\\d{1,2}),(\\d{2}|\\d{4})$/);
+  if (!match) return null;
+  const day = match[1].padStart(2, "0");
+  const month = match[2].padStart(2, "0");
+  const year = match[3].length === 2 ? "20" + match[3] : match[3];
+  const date = year + "-" + month + "-" + day;
+  return validDate(date) ? date : null;
+}
+
+function numericCellValue(cell) {
+  const value = cell?.value;
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "object") {
+    if (value.result !== undefined && value.result !== null) {
+      const n = Number(value.result);
+      return Number.isFinite(n) ? n : null;
+    }
+    if (value.formula) return null;
+    if (value.text !== undefined) {
+      const n = Number(String(value.text).replace(",", "."));
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  }
+  const parsed = Number(String(value).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function importTemplateReadings(workbook, dispatcherId) {
+  const client = await pool.connect();
+  let imported = 0;
+  let sheetsImported = 0;
+  try {
+    await client.query("BEGIN");
+    for (const sheet of workbook.worksheets) {
+      const date = dateFromSheetName(sheet.name);
+      if (!date) continue;
+      sheetsImported++;
+      for (let row = 3; row <= 26; row++) {
+        const hour = numericCellValue(sheet.getCell(row, 1));
+        if (!Number.isInteger(hour) || hour < 1 || hour > 24) continue;
+        for (const point of POINT_COLUMNS) {
+          const hValue = numericCellValue(sheet.getCell(row, point.h));
+          if (hValue === null || hValue < 0) continue;
+          const qValue = point.q === null ? null : numericCellValue(sheet.getCell(row, point.q));
+          if (point.q !== null && (qValue === null || qValue < 0)) continue;
+          const inserted = await client.query(
+            "INSERT INTO observations (id,observation_date,hour,point_key,h_value,q_value,dispatcher_id) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (observation_date,hour,point_key) DO NOTHING",
+            [randomUUID(), date, hour, point.key, hValue, qValue, dispatcherId]
+          );
+          imported += inserted.rowCount;
+        }
+      }
+    }
+    await client.query(
+      "INSERT INTO audit_events (dispatcher_id,event_type,payload) VALUES ($1,'official_template_imported',$2::jsonb)",
+      [dispatcherId, JSON.stringify({ sheets_imported: sheetsImported, observations_imported: imported })]
+    );
+    await client.query("COMMIT");
+    return { sheets_imported: sheetsImported, observations_imported: imported };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+app.post("/api/admin/workbook-template", requireAuth, requireRole("admin"), templateUpload.single("workbook"), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Excel .xlsx faylini tanlang." });
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    const firstSheet = workbook.worksheets[0];
+    if (!firstSheet || !String(firstSheet.getCell(1, 1).value || "").toLowerCase().includes("соат")
+        || workbook.worksheets.length < 1) {
+      return res.status(400).json({ error: "Bu fayl KAMK soatli kuzatuv shabloniga o'xshamaydi." });
+    }
+    await mkdir(path.dirname(TEMPLATE_PATH), { recursive: true });
+    await writeFile(TEMPLATE_PATH, req.file.buffer);
+    const imported = await importTemplateReadings(workbook, req.user.sub);
+    res.status(201).json({
+      ok: true,
+      template_file: path.basename(TEMPLATE_PATH),
+      ...imported,
+      message: "Rasmiy Excel shabloni saqlandi. Mavjud kunlik varaqlar va katak formatlari saqlanadi."
+    });
+  } catch (error) {
+    if (error.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "Excel fayli 10 MB dan kichik bo'lishi kerak." });
+    next(error);
+  }
+});
+
+async function buildOfficialReport(date) {
+  if (!validDate(date)) throw Object.assign(new Error("Hisobot sanasi YYYY-MM-DD ko'rinishida bo'lishi kerak."), { status: 400 });
+  try { await stat(TEMPLATE_PATH); }
+  catch { throw Object.assign(new Error("Rasmiy Excel shabloni hali yuklanmagan. Administrator avval .xlsx shablonni kabinetdan yuklashi kerak."), { status: 503 }); }
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(TEMPLATE_PATH);
+  const [year, month, day] = date.split("-");
+  const shortName = day + "," + month + "," + year.slice(-2);
+  const longName = day + "," + month + "," + year;
+  const worksheet = workbook.getWorksheet(shortName) || workbook.getWorksheet(longName);
+  if (!worksheet) {
+    throw Object.assign(new Error("Excel shablonida " + shortName + " sanasi uchun varaq topilmadi. Yangi kun varag'i shablon asosida qo'shilishi kerak."), { status: 404 });
+  }
+
+  const result = await pool.query(
+    "SELECT hour,point_key,h_value,q_value FROM observations WHERE observation_date=$1 ORDER BY hour,point_key",
+    [date]
+  );
+  const entries = result.rows;
+  for (const entry of entries) {
+    const point = POINT_COLUMNS.find(item => item.key === entry.point_key);
+    if (!point) continue;
+    const row = Number(entry.hour) + 2;
+    const hCell = worksheet.getCell(row, point.h);
+    const hValue = Number(entry.h_value);
+    const existingH = numericCellValue(hCell);
+    if (hCell.value && typeof hCell.value === "object" && hCell.value.formula) {
+      throw Object.assign(new Error("Excel " + hCell.address + " katagida formula bor; avtomatik almashtirish bloklandi."), { status: 409 });
+    }
+    if (existingH !== null && Math.abs(existingH - hValue) > 0.00005) {
+      throw Object.assign(new Error("Excel " + hCell.address + " katagida bazadagi qiymatdan farqli qiymat mavjud. Hisobot xavfsizlik uchun to'xtatildi."), { status: 409 });
+    }
+    if (existingH === null) hCell.value = hValue;
+
+    if (point.q !== null && entry.q_value !== null) {
+      const qCell = worksheet.getCell(row, point.q);
+      const qValue = Number(entry.q_value);
+      const existingQ = numericCellValue(qCell);
+      if (qCell.value && typeof qCell.value === "object" && qCell.value.formula) {
+        throw Object.assign(new Error("Excel " + qCell.address + " katagida formula bor; avtomatik almashtirish bloklandi."), { status: 409 });
+      }
+      if (existingQ !== null && Math.abs(existingQ - qValue) > 0.00005) {
+        throw Object.assign(new Error("Excel " + qCell.address + " katagida bazadagi qiymatdan farqli qiymat mavjud. Hisobot xavfsizlik uchun to'xtatildi."), { status: 409 });
+      }
+      if (existingQ === null) qCell.value = qValue;
+    }
+  }
+
+  await mkdir(REPORT_DIR, { recursive: true });
+  const fileName = "KAMK-soatli-kuzatuv-" + date + ".xlsx";
+  const filePath = path.join(REPORT_DIR, fileName);
+  const buffer = await workbook.xlsx.writeBuffer();
+  await writeFile(filePath, Buffer.from(buffer));
+  return { filePath, fileName, record_count: entries.length, worksheet: worksheet.name };
+}
+
+async function sendReportToTelegram(filePath, fileName, date) {
+  const token = process.env.TELEGRAM_BOT_TOKEN || "";
+  const chatId = process.env.TELEGRAM_CHAT_ID || "";
+  if (!token || !chatId) {
+    throw Object.assign(new Error("Telegram bot tokeni yoki guruh chat ID server sozlamalarida yo'q."), { status: 503 });
+  }
+  const file = await readFile(filePath);
+  const form = new FormData();
+  form.set("chat_id", chatId);
+  form.set("caption", "KAMK soatli kuzatuv hisoboti · " + date);
+  form.set("document", new Blob([file], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  }), fileName);
+  const response = await fetch("https://api.telegram.org/bot" + token + "/sendDocument", {
+    method: "POST",
+    body: form
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) {
+    console.error("Telegram sendDocument failed:", response.status, payload);
+    throw Object.assign(new Error("Telegram hisobotni qabul qilmadi. Botning guruhga qo'shilganini va chat ID ni tekshiring."), { status: 502 });
+  }
+  return payload.result?.message_id ?? null;
+}
+
+async function prepareTelegramReport(user, args) {
+  const date = args?.observation_date;
+  if (!validDate(date)) throw Object.assign(new Error("Hisobot sanasi noto'g'ri."), { status: 400 });
+  const report = await buildOfficialReport(date);
+  const id = randomUUID();
+  await pool.query(
+    "INSERT INTO pending_reports (id,dispatcher_id,observation_date,record_count,status) VALUES ($1,$2,$3,$4,'pending')",
+    [id, user.sub, date, report.record_count]
+  );
+  await pool.query(
+    "INSERT INTO audit_events (dispatcher_id,event_type,entity_id,payload) VALUES ($1,'telegram_report_prepared',$2,$3::jsonb)",
+    [user.sub, id, JSON.stringify({ observation_date: date, record_count: report.record_count, file_name: report.fileName })]
+  );
+  return {
+    report_id: id,
+    status: "pending_confirmation",
+    observation_date: date,
+    file_name: report.fileName,
+    worksheet: report.worksheet,
+    record_count: report.record_count,
+    requires_explicit_confirmation: true,
+    message: "Excel hisoboti tayyor, ammo Telegramga hali yuborilmadi. Dispetcher aniq tasdiqlashi kerak."
+  };
+}
+
+async function confirmTelegramReport(user, args) {
+  const reportId = String(args?.report_id || "");
+  if (!/^[0-9a-f-]{36}$/i.test(reportId)) {
+    throw Object.assign(new Error("Hisobot identifikatori noto'g'ri."), { status: 400 });
+  }
+  const client = await pool.connect();
+  let pending;
+  try {
+    await client.query("BEGIN");
+    const selected = await client.query(
+      "SELECT id,observation_date,record_count,status FROM pending_reports WHERE id=$1 AND dispatcher_id=$2 FOR UPDATE",
+      [reportId, user.sub]
+    );
+    pending = selected.rows[0];
+    if (!pending || pending.status !== "pending") {
+      await client.query("ROLLBACK");
+      throw Object.assign(new Error("Tasdiqlanadigan hisobot topilmadi yoki u allaqachon yuborilgan."), { status: 404 });
+    }
+    await client.query("UPDATE pending_reports SET status='sending' WHERE id=$1", [reportId]);
+    await client.query("COMMIT");
+  } catch (error) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  try {
+    const report = await buildOfficialReport(String(pending.observation_date).slice(0, 10));
+    if (report.record_count !== Number(pending.record_count)) {
+      await pool.query("UPDATE pending_reports SET status='expired' WHERE id=$1", [reportId]);
+      throw Object.assign(new Error("Hisobot tayyorlanganidan keyin yozuvlar o'zgargan. Yangi hisobot tayyorlab, qayta tasdiqlang."), { status: 409 });
+    }
+    const messageId = await sendReportToTelegram(report.filePath, report.fileName, String(pending.observation_date).slice(0, 10));
+    await pool.query(
+      "UPDATE pending_reports SET status='sent',sent_at=NOW(),telegram_message_id=$2 WHERE id=$1",
+      [reportId, messageId]
+    );
+    await pool.query(
+      "INSERT INTO audit_events (dispatcher_id,event_type,entity_id,payload) VALUES ($1,'telegram_report_sent',$2,$3::jsonb)",
+      [user.sub, reportId, JSON.stringify({ observation_date: pending.observation_date, telegram_message_id: messageId })]
+    );
+    return {
+      status: "sent",
+      observation_date: String(pending.observation_date).slice(0, 10),
+      telegram_message_id: messageId,
+      record_count: report.record_count
+    };
+  } catch (error) {
+    await pool.query("UPDATE pending_reports SET status='failed' WHERE id=$1 AND status='sending'", [reportId]).catch(() => {});
+    throw error;
+  }
+}
+
+app.get("/api/reports/export/:date", requireAuth, async (req, res, next) => {
+  try {
+    const report = await buildOfficialReport(req.params.date);
+    res.download(report.filePath, report.fileName);
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
     next(error);
   }
 });
@@ -462,7 +788,6 @@ async function getObservations(user, args) {
       || (pointKey !== null && !POINTS[pointKey])) {
     throw Object.assign(new Error("Kuzatuv qidirish parametrlari noto'g'ri."), { status: 400 });
   }
-  const isManager = ["supervisor", "admin"].includes(user.role);
   const result = await pool.query(
     `SELECT o.observation_date, o.hour, o.point_key, o.h_value, o.q_value,
             d.display_name AS dispatcher_name, o.created_at, o.updated_at
@@ -470,9 +795,8 @@ async function getObservations(user, args) {
       WHERE o.observation_date=$1
         AND ($2::smallint IS NULL OR o.hour=$2)
         AND ($3::text IS NULL OR o.point_key=$3)
-        AND ($4::uuid IS NULL OR o.dispatcher_id=$4)
       ORDER BY o.hour, o.point_key`,
-    [date, hour, pointKey, isManager ? null : user.sub]
+    [date, hour, pointKey]
   );
   return {
     observation_date: date,
@@ -495,6 +819,8 @@ app.post("/api/agent/execute", requireAuth, async (req, res, next) => {
     if (name === "prepare_observation_batch") result = await prepareBatch(req.user, args);
     else if (name === "confirm_observation_batch") result = await confirmBatch(req.user, args);
     else if (name === "get_observations") result = await getObservations(req.user, args);
+    else if (name === "prepare_telegram_report") result = await prepareTelegramReport(req.user, args);
+    else if (name === "confirm_telegram_report") result = await confirmTelegramReport(req.user, args);
     else return res.status(400).json({ error: "Noma'lum AI amali." });
     res.json({ ok: true, result });
   } catch (error) {
@@ -511,6 +837,42 @@ app.use((error, _req, res, _next) => {
 async function start() {
   await initializeDatabase();
   const server = app.listen(PORT, () => console.log(`KAMK Dispatcher API listening on ${PORT}`));
+
+  if (process.env.REPORT_SCHEDULE_ENABLED === "true") {
+    cron.schedule("0 */2 * * *", async () => {
+      const now = new Date();
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Tashkent", year: "numeric", month: "2-digit", day: "2-digit"
+      }).formatToParts(now);
+      const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+      const date = value.year + "-" + value.month + "-" + value.day;
+      const hour = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Tashkent", hour: "2-digit", hourCycle: "h23"
+      }).format(now);
+      const slotKey = date + "T" + hour + ":00";
+      const claimed = await pool.query(
+        "INSERT INTO scheduled_report_runs (slot_key,observation_date,status) VALUES ($1,$2,'started') ON CONFLICT (slot_key) DO NOTHING RETURNING slot_key",
+        [slotKey, date]
+      );
+      if (!claimed.rowCount) return;
+      try {
+        const report = await buildOfficialReport(date);
+        const messageId = await sendReportToTelegram(report.filePath, report.fileName, date);
+        await pool.query(
+          "UPDATE scheduled_report_runs SET status='sent',telegram_message_id=$2,completed_at=NOW() WHERE slot_key=$1",
+          [slotKey, messageId]
+        );
+        console.log("Scheduled KAMK report sent:", slotKey, messageId);
+      } catch (error) {
+        console.error("Scheduled KAMK report failed:", slotKey, error);
+        await pool.query(
+          "UPDATE scheduled_report_runs SET status='failed',error_message=$2,completed_at=NOW() WHERE slot_key=$1",
+          [slotKey, String(error.message || error).slice(0, 1000)]
+        ).catch(() => {});
+      }
+    }, { timezone: "Asia/Tashkent" });
+  }
+
   const shutdown = async () => {
     server.close(async () => {
       await pool.end();
