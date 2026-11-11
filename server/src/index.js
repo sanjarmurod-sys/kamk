@@ -446,6 +446,76 @@ app.post("/api/admin/workbook-template", requireAuth, requireRole("admin"), temp
   }
 });
 
+function cloneDailyWorksheet(workbook, source, targetName) {
+  const target = workbook.addWorksheet(targetName, { properties: { ...source.properties } });
+  target.properties = { ...source.properties };
+  target.pageSetup = { ...source.pageSetup };
+  target.pageMargins = { ...source.pageMargins };
+  target.headerFooter = { ...source.headerFooter };
+  target.views = Array.isArray(source.views) ? source.views.map(view => ({ ...view })) : [];
+
+  target.columns = (source.columns || []).map(column => ({
+    width: column.width,
+    hidden: column.hidden,
+    outlineLevel: column.outlineLevel,
+    style: column.style ? structuredClone(column.style) : undefined
+  }));
+
+  source.eachRow({ includeEmpty: true }, (sourceRow, rowNumber) => {
+    const targetRow = target.getRow(rowNumber);
+    targetRow.height = sourceRow.height;
+    targetRow.hidden = sourceRow.hidden;
+    targetRow.outlineLevel = sourceRow.outlineLevel;
+    sourceRow.eachCell({ includeEmpty: true }, (sourceCell, colNumber) => {
+      const targetCell = targetRow.getCell(colNumber);
+      targetCell.style = structuredClone(sourceCell.style || {});
+      targetCell.numFmt = sourceCell.numFmt;
+      if (rowNumber <= 2 || colNumber === 1) {
+        targetCell.value = sourceCell.value;
+      } else if (sourceCell.value && typeof sourceCell.value === "object"
+          && (sourceCell.value.formula || sourceCell.value.sharedFormula)) {
+        targetCell.value = structuredClone(sourceCell.value);
+      }
+    });
+  });
+
+  const merges = source.model?.merges || [];
+  for (const merge of merges) {
+    try { target.mergeCells(merge); } catch (error) {
+      console.warn("Could not copy workbook merge:", merge, error.message);
+    }
+  }
+  if (source.autoFilter) target.autoFilter = structuredClone(source.autoFilter);
+  if (source.dataValidations) target.dataValidations = structuredClone(source.dataValidations);
+  return target;
+}
+
+function findOrCreateDailyWorksheet(workbook, date) {
+  const [year, month, day] = date.split("-");
+  const shortName = day + "," + month + "," + year.slice(-2);
+  const longName = day + "," + month + "," + year;
+  const existing = workbook.getWorksheet(shortName) || workbook.getWorksheet(longName);
+  if (existing) return { worksheet: existing, created: false };
+
+  const targetTime = Date.parse(date + "T00:00:00Z");
+  const candidates = workbook.worksheets
+    .map(worksheet => ({ worksheet, date: dateFromSheetName(worksheet.name) }))
+    .filter(item => item.date)
+    .sort((a, b) => {
+      const aTime = Date.parse(a.date + "T00:00:00Z");
+      const bTime = Date.parse(b.date + "T00:00:00Z");
+      const aDistance = Math.abs(aTime - targetTime);
+      const bDistance = Math.abs(bTime - targetTime);
+      return aDistance - bDistance;
+    });
+  if (!candidates.length) {
+    throw Object.assign(new Error("Shablonda nusxa olish uchun kunlik varaq topilmadi."), { status: 503 });
+  }
+  const source = candidates[0].worksheet;
+  const worksheet = cloneDailyWorksheet(workbook, source, shortName);
+  return { worksheet, created: true, source_sheet: source.name };
+}
+
 async function buildOfficialReport(date) {
   if (!validDate(date)) throw Object.assign(new Error("Hisobot sanasi YYYY-MM-DD ko'rinishida bo'lishi kerak."), { status: 400 });
   try { await stat(TEMPLATE_PATH); }
@@ -453,13 +523,8 @@ async function buildOfficialReport(date) {
 
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(TEMPLATE_PATH);
-  const [year, month, day] = date.split("-");
-  const shortName = day + "," + month + "," + year.slice(-2);
-  const longName = day + "," + month + "," + year;
-  const worksheet = workbook.getWorksheet(shortName) || workbook.getWorksheet(longName);
-  if (!worksheet) {
-    throw Object.assign(new Error("Excel shablonida " + shortName + " sanasi uchun varaq topilmadi. Yangi kun varag'i shablon asosida qo'shilishi kerak."), { status: 404 });
-  }
+  const dailySheet = findOrCreateDailyWorksheet(workbook, date);
+  const worksheet = dailySheet.worksheet;
 
   const result = await pool.query(
     "SELECT hour,point_key,h_value,q_value FROM observations WHERE observation_date=$1 ORDER BY hour,point_key",
@@ -500,7 +565,14 @@ async function buildOfficialReport(date) {
   const filePath = path.join(REPORT_DIR, fileName);
   const buffer = await workbook.xlsx.writeBuffer();
   await writeFile(filePath, Buffer.from(buffer));
-  return { filePath, fileName, record_count: entries.length, worksheet: worksheet.name };
+  return {
+    filePath,
+    fileName,
+    record_count: entries.length,
+    worksheet: worksheet.name,
+    worksheet_created: dailySheet.created,
+    source_sheet: dailySheet.source_sheet || null
+  };
 }
 
 async function sendReportToTelegram(filePath, fileName, date) {
