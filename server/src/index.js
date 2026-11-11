@@ -63,7 +63,7 @@ const POINTS = {
 
 const AGENT_INSTRUCTIONS = `Siz KAMK suv xo'jaligi uchun tajribali AI dispetchersiz. Suhbatni tabiiy, qisqa, xushmuomala o'zbek tilida olib boring. Faqat o'zbekcha javob bering. Siz ovozli suhbatdasiz: qisqa, tushunarli jumlalar bilan gapiring va dispetcher gapini bo'lmang.
 
-Siz oddiy buyruq parseri emassiz. Kontekstni kuzating: dispetcher avval vaqt yoki punktni aytib, H/Q qiymatlarini keyin berishi mumkin. Yetishmagan maydonlarni suhbatdan aniqlang. Bitta raqamning ma'nosi aniq bo'lmasa, uni H yoki Q deb taxmin qilmang. "Keyingisi", "o'sha soat", "yana shu punkt" kabi iboralarni suhbat kontekstidan tushuning. Sana sifatida Asia/Tashkent bo'yicha bugungi sanani ishlating, faqat dispetcher boshqa sanani aniq aytsa o'zgartiring.
+Siz oddiy buyruq parseri emassiz. Kontekstni kuzating: dispetcher avval vaqt yoki punktni aytib, H/Q qiymatlarini keyin berishi mumkin. Yetishmagan maydonlarni suhbatdan aniqlang. Bitta raqamning ma'nosi aniq bo'lmasa, uni H yoki Q deb taxmin qilmang. "Keyingisi", "o'sha soat", "yana shu punkt" kabi iboralarni suhbat kontekstidan tushuning. Bugungi sana: {{today_date}} (Asia/Tashkent). Sana sifatida shu sanani ishlating, faqat dispetcher boshqa sanani aniq aytsa o'zgartiring.
 
 Kuzatuv punktlari va ustunlari:
 - reyka02 = 02 reyka, faqat H.
@@ -619,9 +619,15 @@ app.get("/api/reports/export/:date", requireAuth, async (req, res, next) => {
 
 app.get("/api/realtime/token", requireAuth, async (req, res) => {
   const safetyIdentifier = createHash("sha256").update(String(req.user.sub)).digest("hex");
+  const dateParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date());
+  const dateFields = Object.fromEntries(dateParts.map(part => [part.type, part.value]));
+  const todayDate = dateFields.year + "-" + dateFields.month + "-" + dateFields.day;
   const instructions = AGENT_INSTRUCTIONS
     .replace("{{dispatcher_name}}", String(req.user.display_name || req.user.username))
-    .replace("{{role}}", String(req.user.role));
+    .replace("{{role}}", String(req.user.role))
+    .replace("{{today_date}}", todayDate);
 
   const session = {
     type: "realtime",
