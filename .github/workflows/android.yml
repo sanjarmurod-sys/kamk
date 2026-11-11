@@ -1,4 +1,4 @@
-name: Android APK
+name: Android and backend checks
 
 on:
   push:
@@ -9,6 +9,29 @@ permissions:
   contents: read
 
 jobs:
+  backend-check:
+    name: Check Realtime backend and client JavaScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package.json
+
+      - name: Install backend dependencies
+        run: npm install --prefix server --no-audit --no-fund
+
+      - name: Check backend syntax
+        run: npm --prefix server run check
+
+      - name: Check Android WebRTC client syntax
+        run: node --check app/src/main/assets/web/app.js
+
   build:
     name: Build and test Android app
     runs-on: ubuntu-latest
@@ -38,7 +61,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: kamk-dispatcher-debug-apk
+          name: kamk-dispatcher-realtime-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
