@@ -44,3 +44,24 @@ CREATE TABLE IF NOT EXISTS audit_events (
 CREATE INDEX IF NOT EXISTS idx_observations_date_hour ON observations(observation_date, hour);
 CREATE INDEX IF NOT EXISTS idx_observations_dispatcher ON observations(dispatcher_id, observation_date);
 CREATE INDEX IF NOT EXISTS idx_audit_dispatcher_time ON audit_events(dispatcher_id, created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS pending_reports (
+  id UUID PRIMARY KEY,
+  dispatcher_id UUID NOT NULL REFERENCES dispatchers(id),
+  observation_date DATE NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending','sent','cancelled','expired')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sent_at TIMESTAMPTZ,
+  telegram_message_id BIGINT
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_report_runs (
+  slot_key TEXT PRIMARY KEY,
+  observation_date DATE NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('started','sent','failed')),
+  error_message TEXT,
+  telegram_message_id BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
