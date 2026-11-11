@@ -619,7 +619,14 @@ app.get("/api/realtime/token", requireAuth, realtimeLimiter, async (req, res) =>
     audio: {
       input: {
         noise_reduction: { type: "near_field" },
-        transcription: { model: "gpt-4o-mini-transcribe", language: "uz" },
+        transcription: {
+          model: "gpt-live-transcribe",
+          keywords: [
+            "KAMK", "KAMK bosh", "KAMK chegara", "PK 66", "PK 287",
+            "PK 390", "PK 446", "PK 559", "PK 583",
+            "02 reyka", "H reyka", "Q kubasi", "nazorat balans"
+          ]
+        },
         turn_detection: {
           type: "server_vad",
           threshold: 0.55,
