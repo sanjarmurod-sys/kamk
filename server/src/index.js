@@ -352,7 +352,7 @@ const POINT_COLUMNS = [
 ];
 
 function dateFromSheetName(name) {
-  const match = String(name).match(/^(\\d{1,2}),(\\d{1,2}),(\\d{2}|\\d{4})$/);
+  const match = String(name).match(/^(\d{1,2}),(\d{1,2}),(\d{2}|\d{4})$/);
   if (!match) return null;
   const day = match[1].padStart(2, "0");
   const month = match[2].padStart(2, "0");
