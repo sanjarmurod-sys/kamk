@@ -420,7 +420,67 @@
   function openSettings() {
     $("settingsBackendUrl").value = state.backendUrl || "";
     $("templateSettings").classList.toggle("hidden", state.user?.role !== "admin");
+    const canManage = ["admin", "supervisor"].includes(state.user?.role);
+    $("accountSettings").classList.toggle("hidden", !canManage);
+    if (canManage) loadDispatchers();
     showScreen("settingsScreen");
+  }
+
+  async function loadDispatchers() {
+    try {
+      const result = await api("/api/admin/dispatchers");
+      const list = $("accountList");
+      list.innerHTML = "";
+      (result.users || []).forEach(user => {
+        const row = document.createElement("div");
+        row.className = "account-item";
+        const identity = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = user.display_name;
+        const meta = document.createElement("span");
+        meta.textContent = user.username + " · " + user.role + (user.active ? "" : " · faol emas");
+        identity.append(name, meta);
+        const status = document.createElement("i");
+        status.className = user.active ? "account-active" : "account-inactive";
+        row.append(identity, status);
+        list.appendChild(row);
+      });
+    } catch (error) {
+      $("accountMessage").textContent = error.message;
+    }
+  }
+
+  async function createDispatcher() {
+    const displayName = $("newDispatcherName").value.trim();
+    const username = $("newDispatcherUsername").value.trim();
+    const password = $("newDispatcherPassword").value;
+    const role = $("newDispatcherRole").value;
+    const message = $("accountMessage");
+    message.style.color = "var(--muted)";
+    message.textContent = "Akkaunt yaratilmoqda…";
+    $("createDispatcherButton").disabled = true;
+    try {
+      await api("/api/admin/dispatchers", {
+        method: "POST",
+        body: JSON.stringify({
+          display_name: displayName,
+          username,
+          password,
+          role
+        })
+      });
+      message.style.color = "var(--green)";
+      message.textContent = "Yangi dispetcher akkaunti yaratildi.";
+      $("newDispatcherName").value = "";
+      $("newDispatcherUsername").value = "";
+      $("newDispatcherPassword").value = "";
+      await loadDispatchers();
+    } catch (error) {
+      message.style.color = "var(--red)";
+      message.textContent = error.message;
+    } finally {
+      $("createDispatcherButton").disabled = false;
+    }
   }
 
   async function uploadOfficialTemplate() {
@@ -490,6 +550,7 @@
   $("settingsButton").addEventListener("click", openSettings);
   $("saveBackendButton").addEventListener("click", saveSettings);
   $("uploadTemplateButton").addEventListener("click", uploadOfficialTemplate);
+  $("createDispatcherButton").addEventListener("click", createDispatcher);
   $("backFromSettings").addEventListener("click", () => showScreen(state.token ? "agentScreen" : "loginScreen"));
   $("logoutButton").addEventListener("click", logout);
   $("clearChatButton").addEventListener("click", () => {
