@@ -422,6 +422,12 @@
     $("templateSettings").classList.toggle("hidden", state.user?.role !== "admin");
     const canManage = ["admin", "supervisor"].includes(state.user?.role);
     $("accountSettings").classList.toggle("hidden", !canManage);
+    const roleSelect = $("newDispatcherRole");
+    if (state.user?.role === "supervisor") {
+      roleSelect.innerHTML = '<option value="dispatcher">Dispetcher</option>';
+    } else {
+      roleSelect.innerHTML = '<option value="dispatcher">Dispetcher</option><option value="supervisor">Nazoratchi</option>';
+    }
     if (canManage) loadDispatchers();
     showScreen("settingsScreen");
   }
