@@ -247,6 +247,22 @@ const loginLimiter = rateLimit({
   message: { error: "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring." }
 });
 
+const realtimeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 12,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Realtime sessiyalar juda tez-tez so'ralmoqda. Biroz kuting." }
+});
+
+const agentActionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 90,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "AI amallari vaqtinchalik cheklovga yetdi." }
+});
+
 app.get("/healthz", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
@@ -689,7 +705,7 @@ app.get("/api/reports/export/:date", requireAuth, async (req, res, next) => {
   }
 });
 
-app.get("/api/realtime/token", requireAuth, async (req, res) => {
+app.get("/api/realtime/token", requireAuth, realtimeLimiter, async (req, res) => {
   const safetyIdentifier = createHash("sha256").update(String(req.user.sub)).digest("hex");
   const dateParts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Tashkent", year: "numeric", month: "2-digit", day: "2-digit"
@@ -889,7 +905,7 @@ async function getObservations(user, args) {
   };
 }
 
-app.post("/api/agent/execute", requireAuth, async (req, res, next) => {
+app.post("/api/agent/execute", requireAuth, agentActionLimiter, async (req, res, next) => {
   try {
     const name = String(req.body?.name || "");
     const args = req.body?.arguments || {};
