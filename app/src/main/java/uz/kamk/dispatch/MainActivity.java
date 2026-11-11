@@ -192,17 +192,17 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public String getAccessToken() {
-            return preferences.getString("access_token", "");
+            return SecureStorage.read(MainActivity.this, "access_token");
         }
 
         @JavascriptInterface
         public void setAccessToken(String value) {
-            preferences.edit().putString("access_token", value == null ? "" : value).apply();
+            SecureStorage.write(MainActivity.this, "access_token", value == null ? "" : value);
         }
 
         @JavascriptInterface
         public void clearAccessToken() {
-            preferences.edit().remove("access_token").apply();
+            SecureStorage.remove(MainActivity.this, "access_token");
         }
 
         @JavascriptInterface
