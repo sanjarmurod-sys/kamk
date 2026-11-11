@@ -29,6 +29,9 @@ jobs:
       - name: Check backend syntax
         run: npm --prefix server run check
 
+      - name: Run backend workbook tests
+        run: npm --prefix server test
+
       - name: Check Android WebRTC client syntax
         run: node --check app/src/main/assets/web/app.js
 
