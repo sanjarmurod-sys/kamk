@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS pending_reports (
   id UUID PRIMARY KEY,
   dispatcher_id UUID NOT NULL REFERENCES dispatchers(id),
   observation_date DATE NOT NULL,
+  record_count INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL CHECK (status IN ('pending','sent','cancelled','expired')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   sent_at TIMESTAMPTZ,
