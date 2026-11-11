@@ -368,7 +368,44 @@
 
   function openSettings() {
     $("settingsBackendUrl").value = state.backendUrl || "";
+    $("templateSettings").classList.toggle("hidden", state.user?.role !== "admin");
     showScreen("settingsScreen");
+  }
+
+  async function uploadOfficialTemplate() {
+    const file = $("templateFile").files?.[0];
+    if (!file) {
+      $("templateMessage").textContent = "Avval asl Excel .xlsx faylini tanlang.";
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      $("templateMessage").textContent = "Faqat .xlsx fayli qabul qilinadi.";
+      return;
+    }
+    $("templateMessage").style.color = "var(--muted)";
+    $("templateMessage").textContent = "Shablon tekshirilmoqda va serverga yuklanmoqda…";
+    $("uploadTemplateButton").disabled = true;
+    try {
+      const form = new FormData();
+      form.append("workbook", file, file.name);
+      const response = await fetch(state.backendUrl + "/api/admin/workbook-template", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + state.token },
+        body: form
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || ("Server xatosi: " + response.status));
+      $("templateMessage").style.color = "var(--green)";
+      $("templateMessage").textContent =
+        "Shablon saqlandi. Varaqlar: " + payload.sheets_imported +
+        ", tarixiy kuzatuvlar import qilindi: " + payload.observations_imported + ".";
+      $("templateFile").value = "";
+    } catch (error) {
+      $("templateMessage").style.color = "var(--red)";
+      $("templateMessage").textContent = error.message;
+    } finally {
+      $("uploadTemplateButton").disabled = false;
+    }
   }
 
   function saveSettings() {
@@ -399,6 +436,7 @@
   $("liveButton").addEventListener("click", () => state.active || state.starting ? stopLiveSession() : startLiveSession());
   $("settingsButton").addEventListener("click", openSettings);
   $("saveBackendButton").addEventListener("click", saveSettings);
+  $("uploadTemplateButton").addEventListener("click", uploadOfficialTemplate);
   $("backFromSettings").addEventListener("click", () => showScreen(state.token ? "agentScreen" : "loginScreen"));
   $("logoutButton").addEventListener("click", logout);
   $("clearChatButton").addEventListener("click", () => {
