@@ -1,43 +1,33 @@
-# KAMK — AI Dispetcher
+# KAMK AI Dispetcher
 
-**Current repository status:** 0.1 was a local prototype only. It is not the intended professional realtime product and must not be used as the final operational system.
+KAMK is being rebuilt as a professional Android voice-first dispatcher agent for hourly water-observation workflows.
 
-## Product target
+## Current milestone: realtime voice and dispatcher backend
 
-A professional Android AI dispatcher with a natural, continuous, low-latency Uzbek speech-to-speech conversation while a dispatcher explicitly has a live session open. The agent must understand conversational context, ask follow-up questions, interpret multiple observation points and execute approved actions through validated app tools.
+The current branch contains:
+- Android WebView-hosted WebRTC voice screen with foreground-only microphone session, barge-in capable Realtime audio, voice connection state and conversation transcript.
+- OpenAI Realtime client-secret endpoint on the backend. Permanent OpenAI API key remains server-side.
+- Individual dispatcher sign-in, role-based supervisor/admin access and PostgreSQL storage.
+- Realtime function tools to prepare observation batches, read the exact values back, wait for explicit spoken confirmation, and commit confirmed readings.
+- Server-side validation for seven points, H-only and H+Q fields, hour/date, duplicate protection and audit events.
+- Native Android microphone permission bridge and local secure-origin assets.
 
-## Target architecture
-
-- Native Android application with a full-duplex WebRTC voice session.
-- OpenAI Realtime speech-to-speech model, beginning with a supported reasoning/tool-capable Realtime model such as `gpt-realtime-2.1`.
-- Trusted HTTPS backend creates short-lived Realtime client secrets. The permanent API key stays on the backend only.
-- Function tools for preparing and confirming observation batches, corrections, querying records, exporting the official Excel template and sending Telegram reports.
-- A real central database and authentication for dispatcher accounts, supervisor and administrator roles.
-- Offline queue, sync conflict handling and audit trail.
-- Official workbook preservation: existing sheets, styles, formulas, merged cells and print setup must be retained.
-
-## Voice behavior
-
-- Tap **Start live session** once. While the live session is active and foregrounded, the agent listens continuously with voice activity detection and natural turn taking.
-- The dispatcher can interrupt the assistant. It must stop speaking and listen.
-- The agent speaks natural Uzbek, remembers the active conversational context and asks only for missing/ambiguous information.
-- Before any write, the agent reads back the observation batch and waits for explicit spoken confirmation.
-- The agent never claims an action succeeded until the backend reports success.
-- Tap **End session** to close microphone and connection. Background listening must be visible, user-controlled and follow Android foreground-service requirements.
-
-## Repository documentation
-
-- `docs/REALTIME_DISPATCHER_AGENT.md` — system architecture, tool boundaries, roles, data safety and acceptance tests.
-- `docs/VOICE_AGENT_CONVERSATION_EXAMPLES.md` — intended natural Uzbek conversational behavior.
-
-## Realtime API references
-
+## Realtime architecture references
 - [Realtime speech-to-speech conversations](https://developers.openai.com/api/docs/guides/realtime-conversations)
-- [Realtime function tools](https://developers.openai.com/api/docs/guides/realtime-mcp)
-- [Realtime client secret endpoint](https://developers.openai.com/api/reference/resources/realtime/subresources/client_secrets/methods/create)
+- [WebRTC connection and ephemeral client secrets](https://developers.openai.com/api/docs/guides/voice-webrtc)
+- [GPT-Realtime-2.1 model](https://developers.openai.com/api/docs/models/gpt-realtime-2.1)
 
-## Configuration and security
+## Repository map
+- `app/` — Android client and local realtime voice UI.
+- `server/` — secure Node.js API, Realtime token minting, PostgreSQL schema and agent function execution.
+- `docs/REALTIME_DISPATCHER_AGENT.md` — target architecture and safety requirements.
+- `docs/VOICE_AGENT_CONVERSATION_EXAMPLES.md` — Uzbek speech-agent behavior examples.
 
-A Realtime integration requires an OpenAI API project with Realtime access and API billing enabled. API usage is separate from a ChatGPT subscription. The permanent OpenAI API key, Telegram bot token, database URL and signing secrets must be stored in the backend deployment's secret manager. **Never commit these values or place them inside the APK.**
+## Backend deployment required
 
-See `docs/REALTIME_DISPATCHER_AGENT.md` before implementing production functionality.
+The APK cannot create a live AI session until the backend is deployed and configured. Follow [server/README.md](server/README.md). Required server-side configuration includes PostgreSQL, a long random JWT secret, and an OpenAI API key with Realtime access and billing enabled. Configure the backend HTTPS URL in the app login screen.
+
+**Never place the permanent OpenAI API key or Telegram bot token in the APK or source repository.**
+
+## Not complete yet
+This milestone is not the finished water-dispatch production system. The official uploaded Excel workbook template and its exact formatting/formulas, Excel export, Telegram scheduled reports, correction workflow, offline synchronization, supervisor dashboard and full on-device acceptance tests remain to be implemented. Do not replace the official operational spreadsheet with this milestone yet.
