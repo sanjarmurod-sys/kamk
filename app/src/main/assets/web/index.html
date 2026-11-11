@@ -100,6 +100,24 @@
             <button id="uploadTemplateButton" class="primary-button full-width" type="button">RASMIY SHABLONNI YUKLASH</button>
             <div id="templateMessage" class="form-message"></div>
           </div>
+          <div id="accountSettings" class="hidden">
+            <div class="settings-divider"></div>
+            <div class="eyebrow">DISPETCHER AKKAUNTLARI</div>
+            <label for="newDispatcherName">Ism-familiya</label>
+            <input id="newDispatcherName" type="text" placeholder="Masalan: Anvar Qodirov">
+            <label for="newDispatcherUsername">Yangi login</label>
+            <input id="newDispatcherUsername" type="text" placeholder="anvar.qodirov" autocomplete="off">
+            <label for="newDispatcherPassword">Vaqtinchalik parol</label>
+            <input id="newDispatcherPassword" type="password" placeholder="Kamida 10 ta belgi" autocomplete="new-password">
+            <label for="newDispatcherRole">Rol</label>
+            <select id="newDispatcherRole" class="native-select">
+              <option value="dispatcher">Dispetcher</option>
+              <option value="supervisor">Nazoratchi</option>
+            </select>
+            <button id="createDispatcherButton" class="primary-button full-width" type="button">AKKAUNT YARATISH</button>
+            <div id="accountMessage" class="form-message"></div>
+            <div id="accountList" class="account-list"></div>
+          </div>
           <div class="settings-divider"></div>
           <div class="setting-row"><span>Realtime ovoz modeli</span><strong>GPT-REALTIME-2.1</strong></div>
           <div class="setting-row"><span>Ovoz</span><strong>MARIN</strong></div>
